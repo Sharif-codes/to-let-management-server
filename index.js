@@ -134,21 +134,21 @@ async function run() {
     })
     app.get('/apartmentData', verifyToken, verifyAdmin, async (req, res) => {
       const availableQuery = { status: "available" }
-      const bookedQuery= {status: "booked"}
-      const usersQuery= {role: "user"}
-      const memberQuery= {role: "member"}
+      const bookedQuery = { status: "booked" }
+      const usersQuery = { role: "user" }
+      const memberQuery = { role: "member" }
       const available = (await apartmentCollection.find(availableQuery).toArray()).length
       const booked = (await apartmentCollection.find(bookedQuery).toArray()).length
-      const user= (await userCollection.find(usersQuery).toArray()).length
-      const member= (await userCollection.find(memberQuery).toArray()).length
+      const user = (await userCollection.find(usersQuery).toArray()).length
+      const member = (await userCollection.find(memberQuery).toArray()).length
       const total = await apartmentCollection.estimatedDocumentCount()
-      console.log("user: ",user);
+      console.log("user: ", user);
       console.log(member);
-      res.send({ total,available,booked,user,member })
+      res.send({ total, available, booked, user, member })
     })
 
     // save user in the database
-    app.put('/users/:email', async (req, res) => {
+    app.post('/users/:email', async (req, res) => {
       const email = req.params.email
       const user = req.body
       const query = { email: email }
@@ -156,13 +156,7 @@ async function run() {
       const isExist = await userCollection.findOne(query)
       console.log('User found?----->', isExist)
       if (isExist) return res.send(isExist)
-      const result = await userCollection.updateOne(
-        query,
-        {
-          $set: { ...user, timestamp: Date.now() },
-        },
-        options
-      )
+      const result = await userCollection.insertOne(user)
       res.send(result)
     })
     //find admin
@@ -196,11 +190,35 @@ async function run() {
       }
       res.send({ member })
     })
+    //load user
+    app.get('/members', async (req, res) => {
+      const query= {role: "member"}
+      console.log("member clicked");
+      const result= await userCollection.find(query).toArray()
+      res.send(result)
+    })
+    //member remove
+    app.patch('/memberRemove/:email', async(req,res)=>{
+      const userEmail= req.params.email
+      const filter= {email: userEmail}
+      const document= {
+        $set:{
+          role: 'user'
+        }
+      }
+      const result= await userCollection.updateOne(filter,document)
+      res.send(result)
+    })
 
     // add agreement to the database
     app.post('/agreement', async (req, res) => {
       const data = req.body
       const result = await agreementCollection.insertOne(data)
+      res.send(result)
+    })
+    //get all agrements
+    app.get('/agreement', async(req,res)=>{
+      const result= await agreementCollection.find().toArray()
       res.send(result)
     })
     // Connect the client to the server	(optional starting in v4.7)
