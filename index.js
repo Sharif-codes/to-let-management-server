@@ -34,22 +34,6 @@ async function run() {
     const userCollection = client.db('gulshan').collection('users')
     const agreementCollection = client.db('gulshan').collection('agreements')
 
-    // send cookie to client
-    // app.post('/jwt', async (req, res) => {
-    //   const user = req.body
-    //   const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-    //     expiresIn: '365d',
-    //   })
-    //   res
-    //     .cookie('token', token, {
-    //       httpOnly: true,
-    //       secure: process.env.NODE_ENV === 'production',
-    //       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-    //       path: '/'
-    //     })
-    //     .send({ success: true })
-    // })
-
     app.post('/jwt', async (req, res) => {
       const user = req.body
       // console.log(process.env.ACCESS_TOKEN)
@@ -76,27 +60,6 @@ async function run() {
       })
     }
 
-    // const verifyToken = async (req, res, next) => {
-    //   const token = req.cookies?.token
-    //   // console.log(token)
-    //   if (!token) {
-    //     return res.status(401).send({ message: 'unauthorized access' })
-    //   }
-    //   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-    //     if (err) {
-    //       console.log(err)
-    //       return res.status(401).send({ message: 'unauthorized access' })
-    //     }
-    //     // console.log('Decoded Token:', decoded)
-    //     req.user = decoded
-    //     console.log(decoded);
-    //     next()
-    //   })
-    // }
-    //remove cookie
-
-    // verify admin
-
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email
       const query = { email: email }
@@ -107,20 +70,17 @@ async function run() {
       }
       next()
     }
-
-    // app.get('/logout', async (req, res) => {
-    //   try {
-    //     res
-    //       .clearCookie('token', {
-    //         maxAge: 0,
-    //         secure: process.env.NODE_ENV === 'production',
-    //         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-    //       })
-    //       .send({ success: true })
-    //   } catch (err) {
-    //     res.status(500).send(err)
-    //   }
-    // })
+    const verifyMember= async (req,res,next)=>{
+      const email= req.decoded.email
+      const query= {email:email}
+      const user= await userCollection.findOne(query)
+      const isMember= user?.role === 'member'
+      if(!isMember)
+      {
+        return res.status(403).send({message: 'forbidden access'})
+      }
+      next()
+    }
 
     app.get('/apartment', async (req, res) => {
       const query = req.query
@@ -148,7 +108,7 @@ async function run() {
     })
 
     // save user in the database
-    app.post('/users/:email', async (req, res) => {
+    app.post('/users/:email',verifyToken, async (req, res) => {
       const email = req.params.email
       const user = req.body
       const query = { email: email }
@@ -160,7 +120,7 @@ async function run() {
       res.send(result)
     })
     //find admin
-    app.get('/user/admin/:email', verifyToken, async (req, res) => {
+    app.get('/user/admin/:email',verifyToken, async (req, res) => {
       const email = req.params.email;
       console.log("decoded data", req.decoded);
       if (email !== req.decoded.email) {
@@ -176,7 +136,7 @@ async function run() {
     })
 
     //find Member
-    app.get('/user/member/:email', verifyToken, async (req, res) => {
+    app.get('/user/member/:email',verifyToken, async (req, res) => {
       const email = req.params.email;
       console.log("decoded data", req.decoded);
       if (email !== req.decoded.email) {
@@ -191,14 +151,14 @@ async function run() {
       res.send({ member })
     })
     //load user
-    app.get('/members', async (req, res) => {
+    app.get('/members',verifyToken,verifyAdmin, async (req, res) => {
       const query= {role: "member"}
       console.log("member clicked");
       const result= await userCollection.find(query).toArray()
       res.send(result)
     })
     //member remove
-    app.patch('/memberRemove/:email', async(req,res)=>{
+    app.patch('/memberRemove/:email',verifyToken,verifyAdmin, async(req,res)=>{
       const userEmail= req.params.email
       const filter= {email: userEmail}
       const document= {
@@ -211,24 +171,61 @@ async function run() {
     })
 
     // add agreement to the database
-    app.post('/agreement', async (req, res) => {
+    app.post('/agreement',verifyToken, async (req, res) => {
       const data = req.body
       const result = await agreementCollection.insertOne(data)
       res.send(result)
     })
     //get all agrements
-    app.get('/agreement', async(req,res)=>{
-      const result= await agreementCollection.find().toArray()
+    app.get('/agreement',verifyToken, verifyAdmin, async(req,res)=>{
+      const query={status: "pending"}
+      const result= await agreementCollection.find(query).toArray()
       res.send(result)
     })
-    // Connect the client to the server	(optional starting in v4.7)
-    //   await client.connect();
-    // Send a ping to confirm a successful connection
-    //   await client.db("admin").command({ ping: 1 });
+    // Accept agreement
+app.patch('/acceptAgreement',verifyToken,verifyAdmin, async (req, res) => {
+  const serial = req.body.si;
+  const userEmail = req.body.email;
+  console.log("serial", serial);
+  console.log("user email", userEmail);
+  const filterSerial = { si: serial };
+  const filterEmail = { email: userEmail };
+  const updatedRequest = {
+    $set: {
+      status: "checked"
+    }
+  };
+  const updatedApartment = {
+    $set: {
+      status: "booked"
+    }
+  };
+  const updateUser = {
+    $set: {
+      role: "member"
+    }
+  };
+  const agreementStatus = await agreementCollection.updateOne(filterSerial, updatedRequest);
+  const apartmentStatus = await apartmentCollection.updateOne(filterSerial, updatedApartment);
+  const userStatus = await userCollection.updateOne(filterEmail, updateUser);
+  res.send({ agreementStatus, apartmentStatus, userStatus });
+});
+
+// Reject agreement
+app.patch('/rejectAgreement/:si',verifyToken,verifyAdmin, async (req, res) => {
+  console.log(serial);
+  console.log(serial);
+  const filter = { si: serial };
+  const updatedDoc = {
+    $set: {
+      status: "checked"
+    }
+  };
+  const result = await agreementCollection.updateOne(filter, updatedDoc);
+  res.send(result);
+});
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
   }
 }
 run().catch(console.dir);
