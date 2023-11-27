@@ -3,7 +3,7 @@ const app = express()
 require('dotenv').config()
 const cors = require('cors')
 const cookieParser = require('cookie-parser')
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken')
 const port = process.env.PORT || 5000
 
@@ -33,6 +33,7 @@ async function run() {
     const apartmentCollection = client.db('gulshan').collection('apartment')
     const userCollection = client.db('gulshan').collection('users')
     const agreementCollection = client.db('gulshan').collection('agreements')
+    const couponCollection = client.db('gulshan').collection('coupons')
 
     app.post('/jwt', async (req, res) => {
       const user = req.body
@@ -183,16 +184,18 @@ async function run() {
       res.send(result)
     })
     // Accept agreement
-app.patch('/acceptAgreement',verifyToken,verifyAdmin, async (req, res) => {
+app.put('/acceptAgreement',verifyToken,verifyAdmin, async (req, res) => {
   const serial = req.body.si;
   const userEmail = req.body.email;
+  const options = { upsert: true }
   console.log("serial", serial);
   console.log("user email", userEmail);
   const filterSerial = { si: serial };
   const filterEmail = { email: userEmail };
   const updatedRequest = {
     $set: {
-      status: "checked"
+      status: "checked",
+      accept_date: Date.now()
     }
   };
   const updatedApartment = {
@@ -205,9 +208,9 @@ app.patch('/acceptAgreement',verifyToken,verifyAdmin, async (req, res) => {
       role: "member"
     }
   };
-  const agreementStatus = await agreementCollection.updateOne(filterSerial, updatedRequest);
-  const apartmentStatus = await apartmentCollection.updateOne(filterSerial, updatedApartment);
-  const userStatus = await userCollection.updateOne(filterEmail, updateUser);
+  const agreementStatus = await agreementCollection.updateOne(filterSerial, updatedRequest,options);
+  const apartmentStatus = await apartmentCollection.updateOne(filterSerial, updatedApartment,options);
+  const userStatus = await userCollection.updateOne(filterEmail, updateUser,options);
   res.send({ agreementStatus, apartmentStatus, userStatus });
 });
 
@@ -224,6 +227,56 @@ app.patch('/rejectAgreement/:si',verifyToken,verifyAdmin, async (req, res) => {
   const result = await agreementCollection.updateOne(filter, updatedDoc);
   res.send(result);
 });
+//get member Data
+app.get("/memberData/:email", async (req,res)=>{
+  const email= req.params.email
+  const query= {user_email: email, status: "checked" }
+  const result= await agreementCollection.find(query).toArray()
+  res.send(result)
+})
+//Add coupon
+app.post("/addCoupon", async (req,res)=>{
+  const couponData= req.body
+  const result= await couponCollection.insertOne(couponData)
+  res.send(result)
+})
+//get coupons
+app.get("/coupons", async(req,res)=>{
+  const result= await couponCollection.find().toArray()
+  res.send(result)
+})
+//unavailable coupon
+app.patch("/couponUnavailable/:id", async(req,res)=>{
+  const id= req.params.id
+  const filter= {_id: new ObjectId(id)}
+  const updateCoupon= {
+    $set:{
+      status: "unavailable"
+    }
+  }
+  const result= await couponCollection.updateOne(filter,updateCoupon)
+  res.send(result)
+})
+//available Coupon
+app.patch("/couponAvailable/:id", async (req,res)=>{
+  const id= req.params.id
+  const filter= {_id: new ObjectId(id)}
+  const updateCoupon={
+    $set:{
+      status: "available"
+    }
+  }
+  const result= await couponCollection.updateOne(filter,updateCoupon)
+  res.send(result)
+})
+//get available rooms
+app.get('/couponAvailable', async(req,res)=>{
+  const query= {status: "available"}
+  const result= await couponCollection.find(query).toArray()
+  res.send(result)
+})
+
+
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
   }
