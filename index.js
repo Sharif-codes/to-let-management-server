@@ -1,10 +1,12 @@
 const express = require('express')
 const app = express()
 require('dotenv').config()
+const stripe= require("stripe")(process.env.PAYMENT_SECRET_KEY)
 const cors = require('cors')
 const cookieParser = require('cookie-parser')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken')
+const { default: Stripe } = require('stripe')
 const port = process.env.PORT || 5000
 
 const corsOptions = {
@@ -34,6 +36,7 @@ async function run() {
     const userCollection = client.db('gulshan').collection('users')
     const agreementCollection = client.db('gulshan').collection('agreements')
     const couponCollection = client.db('gulshan').collection('coupons')
+    const paymentCollection = client.db('gulshan').collection('payments')
 
     app.post('/jwt', async (req, res) => {
       const user = req.body
@@ -273,6 +276,32 @@ app.patch("/couponAvailable/:id", async (req,res)=>{
 app.get('/couponAvailable', async(req,res)=>{
   const query= {status: "available"}
   const result= await couponCollection.find(query).toArray()
+  res.send(result)
+})
+//payment intent
+app.post("/create-payment-intent", async (req,res)=>{
+  const  price= req.body.price
+  const amount= price * 100
+  const paymentIntent= await stripe.paymentIntents.create({
+    amount: amount,
+    currency: "usd",
+    payment_method_types: ["card"]
+  });
+  res.send({
+    ClientSecret: paymentIntent.client_secret
+  })
+})
+//save payment Info
+app.post("/payment", async(req,res)=>{
+  const paymentData= req.body
+  const result= await paymentCollection.insertOne(paymentData)
+  res.send(result)
+})
+//get payment history
+app.get("/payments/:email",async (req,res)=>{
+  const email= req.params.email
+  const query= {email: email}
+  const result= await paymentCollection.find(query).toArray()
   res.send(result)
 })
 
