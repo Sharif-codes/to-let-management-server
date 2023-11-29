@@ -10,7 +10,7 @@ const { default: Stripe } = require('stripe')
 const port = process.env.PORT || 5000
 
 const corsOptions = {
-  origin: ['http://localhost:5173', 'http://localhost:5174'],
+  origin: ['http://localhost:5173', 'https://auth-integ-private.web.app'],
   credentials: true,
   optionSuccessStatus: 200,
 }
@@ -24,8 +24,8 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   }
 });
-app.use(cors(corsOptions))
-app.use(express.json())
+// app.use(cors())
+// app.use(express.json())
 app.use(cookieParser())
 
 
@@ -37,6 +37,7 @@ async function run() {
     const agreementCollection = client.db('gulshan').collection('agreements')
     const couponCollection = client.db('gulshan').collection('coupons')
     const paymentCollection = client.db('gulshan').collection('payments')
+    const anouncementCollection = client.db('gulshan').collection('anouncements')
 
     app.post('/jwt', async (req, res) => {
       const user = req.body
@@ -231,25 +232,25 @@ app.patch('/rejectAgreement/:si',verifyToken,verifyAdmin, async (req, res) => {
   res.send(result);
 });
 //get member Data
-app.get("/memberData/:email", async (req,res)=>{
+app.get("/memberData/:email",verifyToken,verifyAdmin, async (req,res)=>{
   const email= req.params.email
   const query= {user_email: email, status: "checked" }
   const result= await agreementCollection.find(query).toArray()
   res.send(result)
 })
 //Add coupon
-app.post("/addCoupon", async (req,res)=>{
+app.post("/addCoupon",verifyToken,verifyAdmin, async (req,res)=>{
   const couponData= req.body
   const result= await couponCollection.insertOne(couponData)
   res.send(result)
 })
 //get coupons
-app.get("/coupons", async(req,res)=>{
+app.get("/coupons",verifyToken, async(req,res)=>{
   const result= await couponCollection.find().toArray()
   res.send(result)
 })
 //unavailable coupon
-app.patch("/couponUnavailable/:id", async(req,res)=>{
+app.patch("/couponUnavailable/:id",verifyToken,verifyAdmin, async(req,res)=>{
   const id= req.params.id
   const filter= {_id: new ObjectId(id)}
   const updateCoupon= {
@@ -261,7 +262,7 @@ app.patch("/couponUnavailable/:id", async(req,res)=>{
   res.send(result)
 })
 //available Coupon
-app.patch("/couponAvailable/:id", async (req,res)=>{
+app.patch("/couponAvailable/:id",verifyToken,verifyAdmin, async (req,res)=>{
   const id= req.params.id
   const filter= {_id: new ObjectId(id)}
   const updateCoupon={
@@ -273,13 +274,13 @@ app.patch("/couponAvailable/:id", async (req,res)=>{
   res.send(result)
 })
 //get available rooms
-app.get('/couponAvailable', async(req,res)=>{
+app.get('/couponAvailable',verifyToken,verifyAdmin, async(req,res)=>{
   const query= {status: "available"}
   const result= await couponCollection.find(query).toArray()
   res.send(result)
 })
 //payment intent
-app.post("/create-payment-intent", async (req,res)=>{
+app.post("/create-payment-intent",verifyToken, async (req,res)=>{
   const  price= req.body.price
   const amount= price * 100
   const paymentIntent= await stripe.paymentIntents.create({
@@ -292,20 +293,29 @@ app.post("/create-payment-intent", async (req,res)=>{
   })
 })
 //save payment Info
-app.post("/payment", async(req,res)=>{
+app.post("/payment",verifyToken,verifyMember, async(req,res)=>{
   const paymentData= req.body
   const result= await paymentCollection.insertOne(paymentData)
   res.send(result)
 })
 //get payment history
-app.get("/payments/:email",async (req,res)=>{
+app.get("/payments/:email",verifyToken,verifyMember,async (req,res)=>{
   const email= req.params.email
   const query= {email: email}
   const result= await paymentCollection.find(query).toArray()
   res.send(result)
 })
-
-
+//add anouncement
+app.post('/anouncement',verifyToken,verifyAdmin, async (req,res)=>{
+  const anouncement= req.body
+  const result= await anouncementCollection.insertOne(anouncement)
+  res.send(result)
+})
+//get anouncement
+app.get('/anouncement',verifyToken, async (req,res)=>{
+  const result= await anouncementCollection.find().toArray()
+  res.send(result)
+})
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
   }
@@ -313,7 +323,7 @@ app.get("/payments/:email",async (req,res)=>{
 run().catch(console.dir);
 
 app.get('/', (req, res) => {
-  res.send('Hello from StayVista Server..')
+  res.send('Hello from building management Server..')
 })
 
 app.listen(port, () => {
